@@ -234,13 +234,13 @@ local ht  = mint.engine.get_host_time()      -- double: game host time
 local ft  = mint.engine.get_frametime()      -- double: last frame delta (seconds)
 local ti  = mint.engine.get_tick_interval()  -- float: always 0.015
 local htk = mint.engine.get_host_tick()      -- int: host tick counter
-local map = mint.engine.get_map_name()       -- string: current map name (empty if no map)
+local map = mint.engine.get_map_name()       -- string: e.g. "d1_canals_01" (empty if no map loaded)
 local fc  = mint.engine.get_frame_count()   -- int: ImGui frame counter (increments every render frame)
 ```
 
 ### Entity Iteration
 
-Iterate every slot in the client entity list. The callback receives a table per entity and is called for **all** entities including dormant ones — check `ent.is_dormant` to skip them. Return `false` from the callback to break the loop early.
+Iterate every slot in the client entity list. The callback receives a table per entity and is called for **all** entities including dormant ones — check `ent.is_dormant` to skip them. The loop stops early only if the callback raises a Lua error (the error is logged to console and iteration stops).
 
 ```lua
 mint.engine.for_each_entity(function(ent)
@@ -262,11 +262,11 @@ World-only point ray trace. Returns a result table; does **not** hit entities.
 
 ```lua
 local tr = mint.engine.trace_line(x1, y1, z1,  x2, y2, z2)
--- tr.hit           bool    true if the ray hit something
--- tr.fraction      float   0..1, how far along the ray the hit occurred
--- tr.hit_pos       table   {x, y, z} world position of the hit
--- tr.normal        table   {x, y, z} surface normal at the hit
--- tr.entity_index  int     entity index if an entity was hit, -1 for world geometry
+-- tr.hit       bool   true if the ray hit something
+-- tr.fraction  float  0..1, how far along the ray the hit occurred
+-- tr.hit_pos   table  {x, y, z} world position of the hit point
+-- tr.normal    table  {x, y, z} surface normal at the hit point
+-- World-only: passes through all entities (NPCs, props, players)
 
 local eyePos = mint.movement.get_origin()
 -- example: trace straight down 128 units from player origin
@@ -762,7 +762,7 @@ end
 | Script shows error on load | Syntax error or missing API | Check game console for `[Lua]` message |
 | Tab crashes when clicked | Error inside tab draw callback | Check console — error is shown in tab too |
 | `save_table` crashes | Integer-keyed (array) table passed | Use only string keys in the table |
-| `for_each_entity` callback errors stop iteration | Lua error inside callback | Errors are caught and logged — check console |
+| `for_each_entity` stops mid-iteration | Lua error thrown inside callback | Error is caught and logged to console; fix the error and reload |
 | `trace_line` returns `hit=false` always | `engineTraceClient` unavailable | Only works in-game with a loaded map |
 | Script stops running after one error | `hasError` flag set, script disabled | Fix the error and reload/re-enable |
 | `register()` tabs not appearing | `register()` not called at enable time | Ensure `register` is a global function |
