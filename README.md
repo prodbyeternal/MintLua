@@ -2,7 +2,7 @@
 
 MintLua is a sandboxed Lua scripting system for mint that allows you to create custom movement functions, visuals, and GUI controls.
 
-> **This documentation is generated from the C++ source code and is 100% accurate to the implementation.**
+> **This documentation is generated from the C++ source code.**
 
 ## 📋 Table of Contents
 
