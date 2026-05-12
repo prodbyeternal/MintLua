@@ -2,8 +2,6 @@
 
 MintLua is a sandboxed Lua scripting system for mint that allows you to create custom movement functions, visuals, and GUI controls.
 
-> **This documentation is generated from the C++ source code.**
-
 ## 📋 Table of Contents
 
 - [Getting Started](#getting-started)
@@ -236,9 +234,49 @@ local ht  = mint.engine.get_host_time()      -- double: game host time
 local ft  = mint.engine.get_frametime()      -- double: last frame delta (seconds)
 local ti  = mint.engine.get_tick_interval()  -- float: always 0.015
 local htk = mint.engine.get_host_tick()      -- int: host tick counter
+local map = mint.engine.get_map_name()       -- string: current map name (empty if no map)
+local fc  = mint.engine.get_frame_count()   -- int: ImGui frame counter (increments every render frame)
 ```
 
-> ⚠️ **Not implemented:** `get_map_name`, `get_frame_count`, `for_each_entity`, `trace_line` — these do **not** exist in the engine API. Calling them will crash the script.
+### Entity Iteration
+
+Iterate every slot in the client entity list. The callback receives a table per entity and is called for **all** entities including dormant ones — check `ent.is_dormant` to skip them. Return `false` from the callback to break the loop early.
+
+```lua
+mint.engine.for_each_entity(function(ent)
+    -- ent.index       int     entity list slot (1-based)
+    -- ent.class_name  string  network class name, e.g. "CBaseNPC_Antlion"
+    -- ent.is_dormant  bool    true if the entity is currently dormant
+    -- ent.origin      table   {x, y, z} world position (GetAbsOrigin)
+
+    if ent.is_dormant then return end
+    if ent.class_name:find("NPC") then
+        print("NPC at", ent.origin.x, ent.origin.y, ent.origin.z)
+    end
+end)
+```
+
+### Ray Trace
+
+World-only point ray trace. Returns a result table; does **not** hit entities.
+
+```lua
+local tr = mint.engine.trace_line(x1, y1, z1,  x2, y2, z2)
+-- tr.hit           bool    true if the ray hit something
+-- tr.fraction      float   0..1, how far along the ray the hit occurred
+-- tr.hit_pos       table   {x, y, z} world position of the hit
+-- tr.normal        table   {x, y, z} surface normal at the hit
+-- tr.entity_index  int     entity index if an entity was hit, -1 for world geometry
+
+local eyePos = mint.movement.get_origin()
+-- example: trace straight down 128 units from player origin
+local res = mint.engine.trace_line(
+    eyePos.x, eyePos.y, eyePos.z + 64,
+    eyePos.x, eyePos.y, eyePos.z - 64)
+if res.hit then
+    print(string.format("Ground at %.1f (fraction %.2f)", res.hit_pos.z, res.fraction))
+end
+```
 
 ---
 
@@ -664,6 +702,28 @@ function register()
 end
 ```
 
+### Entity Scanner + Ground Trace
+```lua
+-- Print all NPCs and trace to ground below each one
+function on_create_move(cmd)
+    local map = mint.engine.get_map_name()
+    if map == "" then return end  -- no map loaded
+
+    mint.engine.for_each_entity(function(ent)
+        if ent.is_dormant then return end
+        if not ent.class_name:find("NPC") then return end
+
+        local o = ent.origin
+        local tr = mint.engine.trace_line(o.x, o.y, o.z, o.x, o.y, o.z - 256)
+        if tr.hit then
+            print(string.format("[%d] %s  ground=%.1f  dist=%.1f",
+                ent.index, ent.class_name,
+                tr.hit_pos.z, (o.z - tr.hit_pos.z)))
+        end
+    end)
+end
+```
+
 ### Jetpack (uses `on_process_movement_post`)
 ```lua
 local enabled = false
@@ -702,8 +762,8 @@ end
 | Script shows error on load | Syntax error or missing API | Check game console for `[Lua]` message |
 | Tab crashes when clicked | Error inside tab draw callback | Check console — error is shown in tab too |
 | `save_table` crashes | Integer-keyed (array) table passed | Use only string keys in the table |
-| Calling `for_each_entity` crashes | Not implemented in engine API | Remove it — it does not exist |
-| Calling `get_map_name` / `get_frame_count` crashes | Not implemented | Remove them — they do not exist |
+| `for_each_entity` callback errors stop iteration | Lua error inside callback | Errors are caught and logged — check console |
+| `trace_line` returns `hit=false` always | `engineTraceClient` unavailable | Only works in-game with a loaded map |
 | Script stops running after one error | `hasError` flag set, script disabled | Fix the error and reload/re-enable |
 | `register()` tabs not appearing | `register()` not called at enable time | Ensure `register` is a global function |
 | Config not saving colors | Passing `{r,g,b,a}` array to `save_table` | Flatten to string keys: `r=255, g=0...` |
