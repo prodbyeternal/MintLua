@@ -1,6 +1,6 @@
 # 🌿 MintLua API Reference
 
-[![Version](https://img.shields.io/badge/version-1.4.0-green.svg)](https://github.com/OutOfBoundsOffice/SourcePauseTool)
+[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/OutOfBoundsOffice/SourcePauseTool)
 [![Platform](https://img.shields.io/badge/platform-Source%20Engine%202013-blue.svg)]()
 [![Sandbox](https://img.shields.io/badge/security-sandboxed-orange.svg)]()
 
@@ -488,6 +488,6 @@ end
 ---
 
 <p align="center">
-  <i>Every function listed is guaranteed to exist in <b>Mint v1.4.0</b>.</i><br>
+  <i>Every function listed is guaranteed to exist in <b>Mint v1.3.0</b>.</i><br>
   <i>Synchronized with C++ Source on 2026-05-13.</i>
 </p>
