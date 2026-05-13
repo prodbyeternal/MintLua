@@ -6,9 +6,6 @@
 
 **MintLua** is a high-performance, sandboxed Lua scripting engine for `mint`. It allows developers to extend game functionality with custom movement mechanics, advanced visuals, and interactive GUI controls—all without touching C++.
 
-> [!IMPORTANT]
-> This documentation is generated from the C++ source code and is 100% accurate to the implementation.
-
 ---
 
 ## 📑 Table of Contents
