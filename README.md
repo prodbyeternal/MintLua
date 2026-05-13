@@ -2,6 +2,8 @@
 
 MintLua is a sandboxed Lua scripting system for mint that allows you to create custom movement functions, visuals, and GUI controls.
 
+> **This documentation is generated from the C++ source code and is 100% accurate to the implementation.**
+
 ## 📋 Table of Contents
 
 - [Getting Started](#getting-started)
@@ -80,6 +82,7 @@ function on_land() end
 ```lua
 mint.movement.get_velocity()      -- {x, y, z}  AbsVelocity
 mint.movement.get_origin()        -- {x, y, z}  AbsOrigin
+mint.movement.get_eye_pos()       -- {x, y, z}  EyePosition
 mint.movement.is_on_ground()      -- bool        FL_ONGROUND flag
 mint.movement.is_ducking()        -- bool        FL_DUCKING flag
 mint.movement.get_speed()         -- float       sqrt(vx²+vy²)
@@ -128,6 +131,10 @@ mint.movement.set_upmove(cmd, 0)
 --              "attack", "attack2", "reload", "use"
 mint.movement.set_button(cmd, "jump", true)
 local held = mint.movement.get_button(cmd, "jump")   -- bool
+
+-- Force a single attack click reliably (via GetButtonBits)
+-- Useful for triggerbots if CUserCmd bits are being ignored.
+mint.movement.force_attack()
 
 -- Raw button bitfield
 local bits = mint.movement.get_buttons_raw(cmd)   -- int
@@ -186,24 +193,25 @@ mint.movement.move_set_view_angles(move, pitch, yaw, roll)
 ```lua
 mint.input.is_key_down(vk)      -- bool: key currently held (uses GetAsyncKeyState)
 mint.input.was_key_pressed(vk)  -- bool: key pressed since last call
+
+-- Source Engine ButtonCode support
+mint.input.is_button_down(code) -- bool: button code is held (mouse, etc.)
+mint.input.get_button_name(code)-- string: get engine name for code
+mint.input.lookup_button(name)  -- int: find code by engine name
 ```
 
-### Predefined Key Constants
+### ⌨️ Key & Button Constants
 
-| Constant | Windows VK |
+Mint provides a large set of constants for both Windows Virtual Keys (VK) and Source Engine ButtonCodes. You can also pass raw integer values directly.
+
+| Constant Type | Examples |
 |---|---|
-| `KEY_SPACE` | VK_SPACE |
-| `KEY_SHIFT` | VK_SHIFT |
-| `KEY_CTRL` | VK_CONTROL |
-| `KEY_ALT` | VK_MENU (0x12) |
-| `KEY_W` `KEY_A` `KEY_S` `KEY_D` | 'W' 'A' 'S' 'D' |
-| `KEY_E` `KEY_Q` `KEY_F` `KEY_R` | 'E' 'Q' 'F' 'R' |
-| `KEY_X` `KEY_C` `KEY_V` | 'X' 'C' 'V' |
-| `KEY_LBUTTON` | VK_LBUTTON |
-| `KEY_RBUTTON` | VK_RBUTTON |
-| `KEY_MBUTTON` | VK_MBUTTON |
+| **Windows VK** | `VK_SPACE`, `VK_SHIFT`, `VK_CONTROL`, `VK_MENU` (ALT), `VK_TAB`, `VK_ESCAPE`, `VK_F1`..`VK_F12`, `VK_LEFT`..`VK_DOWN` |
+| **Alpha Keys** | `KEY_A` through `KEY_Z` |
+| **Numeric Keys** | `KEY_0` through `KEY_9` |
+| **Mouse/Engine** | `MOUSE_LEFT`, `MOUSE_RIGHT`, `MOUSE_MIDDLE`, `MOUSE_4`, `MOUSE_5`, `MOUSE_WHEEL_UP`, `MOUSE_WHEEL_DOWN` |
 
-For any other key, pass the Windows VK code as an integer directly (e.g. `0x70` for F1).
+> **Tip:** If a key is not listed, you can use any Windows VK code directly (e.g. `0x08` for Backspace).
 
 ---
 
@@ -236,37 +244,34 @@ local ti  = mint.engine.get_tick_interval()  -- float: always 0.015
 local htk = mint.engine.get_host_tick()      -- int: host tick counter
 local map = mint.engine.get_map_name()       -- string: e.g. "d1_canals_01" (empty if no map loaded)
 local fc  = mint.engine.get_frame_count()   -- int: ImGui frame counter (increments every render frame)
+
+-- Get specific entity info by index
+local ent = mint.engine.get_entity_info(index)
+-- Returns: {valid=bool, index=int, is_dormant=bool, class_name=string, origin={x,y,z}}
 ```
 
 ### Entity Iteration
-
-Iterate every slot in the client entity list. The callback receives a table per entity and is called for **all** entities including dormant ones — check `ent.is_dormant` to skip them. The loop stops early only if the callback raises a Lua error (the error is logged to console and iteration stops).
-
 ```lua
-mint.engine.for_each_entity(function(ent)
-    -- ent.index       int     entity list slot (1-based)
-    -- ent.class_name  string  network class name, e.g. "CBaseNPC_Antlion"
-    -- ent.is_dormant  bool    true if the entity is currently dormant
-    -- ent.origin      table   {x, y, z} world position (GetAbsOrigin)
-
-    if ent.is_dormant then return end
-    if ent.class_name:find("NPC") then
-        print("NPC at", ent.origin.x, ent.origin.y, ent.origin.z)
-    end
-end)
+mint.engine.for_each_entity(function(ent) ... end)
 ```
 
 ### Ray Trace
 
-World-only point ray trace. Returns a result table; does **not** hit entities.
+Mint provides two types of ray tracing: world-only and entity-aware.
 
 ```lua
-local tr = mint.engine.trace_line(x1, y1, z1,  x2, y2, z2)
--- tr.hit       bool   true if the ray hit something
--- tr.fraction  float  0..1, how far along the ray the hit occurred
--- tr.hit_pos   table  {x, y, z} world position of the hit point
--- tr.normal    table  {x, y, z} surface normal at the hit point
--- World-only: passes through all entities (NPCs, props, players)
+-- Entity-aware trace: hits players, NPCs, and props.
+-- Skips the local player automatically.
+local tr = mint.engine.trace_ray(x1,y1,z1, x2,y2,z2)
+-- tr.hit          bool   true if something was hit
+-- tr.fraction     float  0..1
+-- tr.hit_pos      table  {x, y, z}
+-- tr.normal       table  {x, y, z}
+-- tr.entity_index int    index of the hit entity (-1 if none)
+
+-- World-only trace: passes through all entities.
+local tr = mint.engine.trace_line(x1,y1,z1, x2,y2,z2)
+```
 
 local eyePos = mint.movement.get_origin()
 -- example: trace straight down 128 units from player origin
@@ -395,14 +400,22 @@ local r = mint.gui.input_text("Label", string_value)   -- r[1]=changed, r[2]=new
 local r = mint.gui.input_float("Label", float_value)   -- r[1]=changed, r[2]=new float
 local r = mint.gui.input_int("Label", int_value)       -- r[1]=changed, r[2]=new int
 
--- Combo (0-based index)
+-- Combo (0-based index). Third arg MUST be a Lua array table of strings.
 local items = {"A", "B", "C"}
 local r = mint.gui.combo("Label", current_index, items)
 -- r[1]=changed, r[2]=new 0-based index
+-- WARNING: passing a non-table or non-string-array will crash the tab.
 
 -- Color edit (table of {R,G,B,A} 0-255)
 local r = mint.gui.color_edit("Label", {255, 0, 0, 255})
 -- r[1]=changed, r[2]=R, r[3]=G, r[4]=B, r[5]=A
+
+-- Keybind (returns {changed, new_vk})
+local r = mint.gui.keybind("My Hotkey", current_vk)
+if r[1] then
+    current_vk = r[2]
+    print("New key bound: ", current_vk)
+end
 ```
 
 ### Layout
@@ -417,6 +430,7 @@ mint.gui.indent(w)
 mint.gui.unindent(w)
 mint.gui.text("text")
 mint.gui.text_colored(r, g, b, a, "text")
+mint.gui.text_disabled("text")
 mint.gui.progress_bar(fraction, w, h, overlay_string)   -- overlay_string is optional
 ```
 
