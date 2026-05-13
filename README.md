@@ -7,7 +7,7 @@
 This is the definitive guide to the **MintLua** scripting system. Every function listed here is cross-referenced directly with the C++ implementation in the `mint` source code.
 
 > [!IMPORTANT]
-> **100% Accuracy Guarantee**: This documentation matches the C++ bindings exactly as defined in `movement_api.cpp`, `engine_api.cpp`, `render_api.cpp`, `gui_api.cpp`, `config_api.cpp`, and `animation_api.cpp`.
+> This documentation matches the C++ bindings exactly as defined in `movement_api.cpp`, `engine_api.cpp`, `render_api.cpp`, `gui_api.cpp`, `config_api.cpp`, and `animation_api.cpp`.
 
 ---
 
