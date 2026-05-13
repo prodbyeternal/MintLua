@@ -1,6 +1,6 @@
 # 🌿 MintLua API Reference
 
-[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/OutOfBoundsOffice/SourcePauseTool)
+[![Version](https://img.shields.io/badge/version-1.4.0-green.svg)](https://github.com/OutOfBoundsOffice/SourcePauseTool)
 [![Platform](https://img.shields.io/badge/platform-Source%20Engine%202013-blue.svg)]()
 [![Sandbox](https://img.shields.io/badge/security-sandboxed-orange.svg)]()
 
@@ -172,7 +172,7 @@ function on_land() end
 | `lookup_button(name)` | `string`| `int` | Map engine name (e.g. "MOUSE1") to code. |
 
 ### 📦 Predefined Constants
-`VK_SPACE`, `VK_SHIFT`, `VK_CONTROL`, `VK_MENU` (Alt), `VK_ESCAPE`, `KEY_0`..`KEY_9`, `KEY_A`..`KEY_Z`, `MOUSE_LEFT`, `MOUSE_RIGHT`, `MOUSE_MIDDLE`, `MOUSE_4`, `MOUSE_5`, `MOUSE_WHEEL_UP`, `MOUSE_WHEEL_DOWN`.
+`VK_LBUTTON`, `VK_RBUTTON`, `VK_MBUTTON`, `VK_CANCEL`, `VK_BACK`, `VK_TAB`, `VK_CLEAR`, `VK_RETURN`, `VK_SHIFT`, `VK_CONTROL`, `VK_MENU` (Alt), `VK_PAUSE`, `VK_CAPITAL`, `VK_ESCAPE`, `VK_SPACE`, `VK_PRIOR`, `VK_NEXT`, `VK_END`, `VK_HOME`, `VK_LEFT`, `VK_UP`, `VK_RIGHT`, `VK_DOWN`, `VK_INSERT`, `VK_DELETE`, `VK_F1`..`VK_F12`, `KEY_0`..`KEY_9`, `KEY_A`..`KEY_Z`, `MOUSE_LEFT`, `MOUSE_RIGHT`, `MOUSE_MIDDLE`, `MOUSE_4`, `MOUSE_5`, `MOUSE_WHEEL_UP`, `MOUSE_WHEEL_DOWN`.
 
 ---
 
@@ -233,11 +233,15 @@ local s = mint.render.get_screen_size() -- {width, height}
 | `draw_rect_gradient(x..h, r1..a1, ... r4..a4)` | `20 args`| 4-corner multi-color. |
 | `draw_circle(x,y, rad, r,g,b,a, thick)` | `8 args` | — |
 | `draw_circle_filled(x,y, rad, r,g,b,a)` | `7 args` | — |
+| `draw_triangle(x1,y1, x2,y2, x3,y3, r,g,b,a, thick)` | `11 args`| Outline. |
 | `draw_triangle_filled(x1,y1, x2,y2, x3,y3, r,g,b,a)` | `10 args`| — |
+| `draw_quad(x1,y1, x2,y2, x3,y3, x4,y4, r,g,b,a, thick)` | `13 args`| Outline. |
+| `draw_quad_filled(x1,y1, x2,y2, x3,y3, x4,y4, r,g,b,a)` | `12 args`| — |
 | `draw_arc_filled(cx,cy, rad, start, end, r,g,b,a, segs)`| `10 args`| Pie section. |
 | `draw_polyline(pts, r,g,b,a, closed, thick)` | `tbl, 6 args`| `pts` is `{x1,y1, x2,y2...}` |
 | `draw_polygon_filled(pts, r,g,b,a)` | `tbl, 4 args`| Convex only. |
 | `draw_bezier_cubic(x1..y4, r,g,b,a, thick, segs)` | `14 args`| — |
+| `draw_bezier_quadratic(x1,y1, x2,y2, x3,y3, r,g,b,a, thick, segs)` | `12 args`| — |
 | `push_clip_rect(x,y,w,h, intersect)` | `5 args` | Scissor start. |
 | `pop_clip_rect()` | — | Scissor end. |
 
@@ -245,6 +249,7 @@ local s = mint.render.get_screen_size() -- {width, height}
 | Function | Args | Returns |
 | :--- | :--- | :--- |
 | `draw_text(x,y, str, r,g,b,a, size)` | `8 args` | — |
+| `draw_text_sized(x,y, str, r,g,b,a, size)` | `8 args` | Same as draw_text. |
 | `text_size(str, size)` | `str, f` | `{x, y, w, h}` |
 | `draw_text_rotated(cx,cy, str, r,g,b,a, size, rad)`| `9 args` | Clockwise. |
 | `draw_text_wave(x,y, str, r,g,b,a, size, amp, freq, t, phase)`| `12 args` | Sine vertical wave. |
@@ -257,34 +262,138 @@ local s = mint.render.get_screen_size() -- {width, height}
 
 ## 🖼️ GUI API (`mint.gui`)
 
-Pattern: All value-producing widgets return `{changed, new_value}`.
+**Pattern**: All value-producing widgets take the current value and return `{changed, new_value}`. Store the new value yourself.
 
 ### 🎛️ Widgets
 ```lua
-local r = mint.gui.checkbox("Label", bool)      -- r[1]=changed, r[2]=new bool
-local r = mint.gui.slider_float("Label", v, min, max, "%.2f")
-local r = mint.gui.combo("Label", index, {"A", "B"}) -- r[2]=new index
-local r = mint.gui.color_edit("Label", {255,0,0,255}) -- r[2..5]=RGBA
-local r = mint.gui.keybind("Label", current_vk) -- r[2]=new_vk
+-- Checkbox
+local r = mint.gui.checkbox("Label", bool_value) -- r[1]=changed, r[2]=new bool
 
-if mint.gui.button("Label", w, h) then ... end -- returns bool directly
+-- Sliders
+local r = mint.gui.slider_float("Label", value, min, max, "%.2f")
+local r = mint.gui.slider_int("Label", value, min, max, "%d") -- r[1]=changed, r[2]=new value
+
+-- Button (returns bool directly)
+if mint.gui.button("Label", width, height) then ... end
+
+-- Text inputs
+local r = mint.gui.input_text("Label", string_value)
+local r = mint.gui.input_float("Label", float_value)
+local r = mint.gui.input_int("Label", int_value)
+
+-- Combo (0-based index)
+local items = {"One", "Two", "Three"}
+local r = mint.gui.combo("Label", current_index, items) -- r[2]=new index
+
+-- Color edit (table of {R,G,B,A} 0-255)
+local r = mint.gui.color_edit("Label", {255, 0, 0, 255})
+-- r[1]=changed, r[2]=R, r[3]=G, r[4]=B, r[5]=A
+
+-- Keybind
+local r = mint.gui.keybind("Label", current_vk) -- r[2]=new_vk
 ```
 
-### 🏗️ Layout & Containers
-| Function | Description |
-| :--- | :--- |
-| `begin_window(title, options)` | `options`: `{pos_x, pos_y, size_x, size_y, no_titlebar, no_resize...}` |
-| `end_window()` | — |
-| `begin_child(id, w, h, border, flags)` | `bool`: visible. |
-| `register_tab("Name", function)` | Adds a persistent sidebar tab. |
-| `same_line(offset, spacing)` | Align next widget horizontally. |
-| `separator()` / `spacing()` / `indent(w)` | Layout adjustment. |
-| `progress_bar(frac, w, h, overlay)` | — |
+### 🏗️ Layout
+```lua
+mint.gui.separator()
+mint.gui.same_line(offset, spacing) -- Optional args
+mint.gui.new_line()
+mint.gui.spacing()
+mint.gui.dummy(w, h)
+mint.gui.indent(w)
+mint.gui.unindent(w)
+mint.gui.text("Static Text")
+mint.gui.text_colored(255, 255, 0, 255, "Yellow Text")
+mint.gui.text_disabled("Gray Text")
+mint.gui.progress_bar(fraction, w, h, "Overlay")
+```
 
-### 🛠️ Styling (Constants)
-Use `push_style_color` and `push_style_var` with these tables:
-- `mint.gui.col.*`: `Text`, `WindowBg`, `Border`, `Button`, `CheckMark`, `SliderGrab`, etc.
-- `mint.gui.var.*`: `Alpha`, `WindowPadding` (Vec2), `WindowRounding`, `ItemSpacing` (Vec2), etc.
+### 💬 Tooltips
+```lua
+mint.gui.set_tooltip("Helpful info") -- Sets tooltip for last widget
+mint.gui.begin_tooltip()
+    mint.gui.text("Custom Tooltip Layout")
+mint.gui.end_tooltip()
+```
+
+### 🔍 Item State
+```lua
+mint.gui.is_item_hovered()      -- bool
+mint.gui.is_item_clicked(btn)   -- bool (0=LMB, 1=RMB, 2=MMB)
+mint.gui.is_item_active()       -- bool
+mint.gui.is_window_hovered()    -- bool
+mint.gui.is_window_focused()    -- bool
+```
+
+### 📦 Child Regions & Groups
+```lua
+mint.gui.begin_child("id", w, h, border, flags) -- returns bool: visible
+mint.gui.end_child()
+mint.gui.begin_group()
+mint.gui.end_group()
+```
+
+### 📍 Cursor & Region
+```lua
+local p = mint.gui.get_cursor_pos()           -- {x, y} relative to window
+mint.gui.set_cursor_pos(x, y)
+local p = mint.gui.get_cursor_screen_pos()    -- {x, y} absolute screen
+local a = mint.gui.get_content_region_avail() -- {x, y} remaining space
+```
+
+### 🖥️ IO Info
+```lua
+local io = mint.gui.get_io()
+-- Returns: {display_w, display_h, mouse_x, mouse_y, framerate, delta_time}
+```
+
+### 🪟 Standalone Windows
+```lua
+local res = mint.gui.begin_window("Title", {
+    pos_x = 100, pos_y = 100,
+    size_x = 400, size_y = 300,
+    set_pos_once = true,
+    no_titlebar = false,
+    no_background = false,
+    closeable = true,
+    open = true -- initial state
+})
+if res.visible then
+    mint.gui.text("Window Content")
+end
+mint.gui.end_window()
+```
+
+### 🎟️ Registration
+*Use these exclusively inside `register()` hook.*
+```lua
+-- Adds a custom tab to the Mint sidebar
+mint.gui.register_tab("My Tab", function()
+    mint.gui.text("Custom Tab Content")
+end)
+
+-- Integration (advanced)
+mint.gui.register_menu_item(tab_idx, sub_idx, "Label", function() end)
+mint.gui.register_bind_indicator("Label", "+command")
+```
+
+### 🎨 Styling
+```lua
+mint.gui.push_style_color(mint.gui.col.WindowBg, r, g, b, a)
+mint.gui.pop_style_color(count)
+
+mint.gui.push_style_var(mint.gui.var.WindowRounding, value)
+mint.gui.push_style_var_vec2(mint.gui.var.ItemSpacing, x, y)
+mint.gui.pop_style_var(count)
+```
+
+**mint.gui.col.\*** — ImGuiCol constants (exact names from source):
+> Text, TextDisabled, WindowBg, ChildBg, PopupBg, Border, FrameBg, FrameBgHovered, FrameBgActive, TitleBg, TitleBgActive, TitleBgCollapsed, MenuBarBg, ScrollbarBg, ScrollbarGrab, ScrollbarGrabHovered, ScrollbarGrabActive, CheckMark, SliderGrab, SliderGrabActive, Button, ButtonHovered, ButtonActive, Header, HeaderHovered, HeaderActive, Separator, SeparatorHovered, SeparatorActive, ResizeGrip, ResizeGripHovered, ResizeGripActive, PlotLines, PlotLinesHovered, PlotHistogram, PlotHistogramHovered
+
+**mint.gui.var.\*** — ImGuiStyleVar constants (exact names from source):
+> Alpha, DisabledAlpha, WindowPadding✳, WindowRounding, WindowBorderSize, WindowMinSize✳, WindowTitleAlign✳, ChildRounding, ChildBorderSize, PopupRounding, PopupBorderSize, FramePadding✳, FrameRounding, FrameBorderSize, ItemSpacing✳, ItemInnerSpacing✳, IndentSpacing, ScrollbarSize, ScrollbarRounding, GrabMinSize, GrabRounding, TabRounding, ButtonTextAlign✳, SelectableTextAlign✳
+
+✳ = Vec2 var, use `push_style_var_vec2`
 
 ---
 
@@ -293,10 +402,14 @@ Use `push_style_color` and `push_style_var` with these tables:
 | Function | Args | Description |
 | :--- | :--- | :--- |
 | `lerp(a, b, t)` | `3 floats` | Linear interpolate. |
+| `clamp(v, lo, hi)` | `3 floats` | Clamp value to range. |
+| `smoothstep(a, b, v)` | `3 floats` | Smooth Hermite interpolation. |
+| `smootherstep(a, b, v)` | `3 floats` | Ken Perlin's smoother step. |
 | `damp(curr, target, rate, dt)`| `4 floats` | Frametime-independent smooth. |
 | `pulse(time, freq)` | `2 floats` | Sine pulse [0, 1]. |
 | `triangle(time, freq)` | `2 floats` | Triangle wave [0, 1]. |
-| `hsv(h, s, v, a)` | `4 floats` | `{r, g, b, a}` (0-255). |
+| `hsv(h, s, v, a)` | `3 floats, 1 int` | `{r, g, b, a}` (0-255). |
+| `lerp_color(r1,g1,b1,a1, r2,g2,b2,a2, t)` | `9 args` | `{r, g, b, a}` (0-255). |
 | `rolling_dial(curr, target, idx)`| `2 f, 1 i`| For speedometer digit dials. |
 | `dial_split(dial_val)` | `float` | `{digit, next, frac}` for rendering. |
 
@@ -327,7 +440,7 @@ Restricted read-only access to `lua_scripts/`.
 ## 🔒 Sandbox
 
 The following globals are **REMOVED**:
-`os`, `io`, `package`, `debug`, `dofile`, `loadfile`, `load`, `require`, `rawget`, `rawset`, `rawequal`, `collectgarbage`.
+`os`, `io`, `package`, `debug`, `dofile`, `loadfile`, `load`, `require`, `getfenv`, `setfenv`, `rawget`, `rawset`, `rawequal`, `newproxy`, `collectgarbage`, `gcinfo`.
 
 **Available Libraries**: `base`, `string`, `table`, `math`.
 
