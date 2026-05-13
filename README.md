@@ -6,18 +6,25 @@
 
 **MintLua** is a high-performance, sandboxed Lua scripting engine for `mint`. It allows developers to extend game functionality with custom movement mechanics, advanced visuals, and interactive GUI controls—all without touching C++.
 
+> [!IMPORTANT]
+> This documentation is generated from the C++ source code and is 100% accurate to the implementation.
+
 ---
 
 ## 📑 Table of Contents
 
 - [🚀 Getting Started](#-getting-started)
 - [📝 Script Structure](#-script-structure)
+- [🔗 Movement Hooks](#-movement-hooks)
 - [🎮 Movement API](#-movement-api-mintmovement)
 - [⌨️ Input API](#-input-api-mintinput)
 - [⚙️ Engine API](#-engine-api-mintengine)
 - [🎨 Render API](#-render-api-mintrender)
 - [🖼️ GUI API](#-gui-api-mintgui)
 - [✨ Animation API](#-animation-api-mintanim)
+- [💾 Config API](#-config-api-mintconfig)
+- [📁 File IO API](#-file-io-api-safe_io)
+- [🔒 Sandbox](#-sandbox)
 - [📚 Examples](#-examples)
 - [🛠️ Troubleshooting](#-troubleshooting)
 
@@ -37,157 +44,345 @@
 Extend the engine by defining these optional global hooks:
 
 ```lua
--- Hook into the input system (per-tick)
+-- Called every tick before the engine processes input (CUserCmd available)
 function on_create_move(cmd) end
 
--- Hook into physics simulation (pre-step)
+-- Called every tick BEFORE physics simulation (CMoveData available)
 function on_process_movement_pre(player, move) end
 
--- Hook into physics simulation (post-step)
+-- Called every tick AFTER physics simulation
 function on_process_movement_post(player, move) end
 
--- Draw custom HUD elements (every frame)
+-- Called every ImGui frame for rendering (use mint.render here)
 function on_render() end
 
--- Add custom controls to the mint menu
+-- Called every frame when the mint menu is open
 function on_menu_draw() end
 
--- Initialize your script and register tabs
+-- Called once when the script is enabled (use mint.gui.register_tab here)
 function register() end
 
--- Ground state event triggers
+-- Edge-triggered ground events
 function on_jump() end
 function on_land() end
 ```
 
 > [!NOTE]
-> `cmd`, `player`, and `move` are opaque integer handles used in the `mint.movement.*` API calls.
+> `cmd`, `player`, and `move` are opaque integer handles passed back into the respective `mint.movement.*` API calls.
+
+---
+
+## 🔗 Movement Hooks
+
+| Hook | When called | Handle |
+|---|---|---|
+| `on_create_move(cmd)` | Every input tick | `cmd` → CUserCmd |
+| `on_process_movement_pre(player, move)` | Before engine physics | `move` → CMoveData |
+| `on_process_movement_post(player, move)` | After engine physics | `move` → CMoveData |
+| `on_render()` | Every ImGui frame | — |
+| `on_menu_draw()` | While mint menu is open | — |
+| `register()` | Once on enable | — |
+| `on_jump()` | Edge: just left ground | — |
+| `on_land()` | Edge: just touched ground | — |
 
 ---
 
 ## 🎮 Movement API (`mint.movement`)
 
-The core of `mint`'s power. Directly manipulate player physics and inputs.
+### 🔍 Player State (Read)
 
-### 🔍 Read State
-| Function | Return Type | Description |
-| :--- | :--- | :--- |
-| `get_velocity()` | `{x, y, z}` | Current Absolute Velocity |
-| `get_origin()` | `{x, y, z}` | Current Absolute Origin |
-| `is_on_ground()` | `bool` | True if touching the floor |
-| `get_speed()` | `float` | Horizontal speed (2D) |
-| `get_max_speed()` | `float` | Current engine max speed cap |
-
-### ⚡ Write State
 ```lua
-mint.movement.set_velocity(x, y, z)   -- Overwrite absolute velocity
-mint.movement.add_velocity(x, y, z)   -- Apply an impulse/force
-mint.movement.set_z_velocity(z)       -- Set vertical speed only
-mint.movement.set_on_ground(bool)     -- Force ground/air state
+mint.movement.get_velocity()      -- {x, y, z}  AbsVelocity
+mint.movement.get_origin()        -- {x, y, z}  AbsOrigin
+mint.movement.get_eye_pos()       -- {x, y, z}  EyePosition
+mint.movement.is_on_ground()      -- bool        FL_ONGROUND flag
+mint.movement.is_ducking()        -- bool        FL_DUCKING flag
+mint.movement.get_speed()         -- float       sqrt(vx²+vy²)
+mint.movement.get_speed_3d()      -- float       sqrt(vx²+vy²+vz²)
+mint.movement.get_z_velocity()    -- float       vz only
+mint.movement.get_max_speed()     -- float       m_flMaxspeed
 ```
 
-### 🖱️ CUserCmd (Input Manipulation)
-*Use these inside `on_create_move(cmd)`*
+### ⚡ Player State (Write)
+
 ```lua
-mint.movement.set_button(cmd, "jump", true)     -- Force a button state
-mint.movement.set_view_angles(cmd, pitch, yaw)  -- Change where you're looking
-mint.movement.force_attack()                    -- Reliable single-frame attack
+mint.movement.set_velocity(x, y, z)   -- overwrite AbsVelocity
+mint.movement.add_velocity(x, y, z)   -- impulse (adds to AbsVelocity)
+mint.movement.set_z_velocity(z)       -- vertical only
+mint.movement.set_on_ground(bool)     -- force FL_ONGROUND flag
+mint.movement.set_max_speed(v)        -- overwrite m_flMaxspeed
+```
+
+### 🐰 Bhop Control
+
+```lua
+mint.movement.set_bhop(bool)   -- enable/disable Lua-controlled autojump
+mint.movement.get_bhop()       -- bool
+```
+
+### ⌨️ CUserCmd — *Use inside `on_create_move(cmd)`*
+
+```lua
+-- View angles
+local a = mint.movement.get_view_angles(cmd)   -- {pitch, yaw}
+mint.movement.set_view_angles(cmd, pitch, yaw)
+
+-- Forward direction vector from angles
+local fwd = mint.movement.get_forward_vector(pitch, yaw)  -- {x, y, z}
+
+-- Move inputs
+local f = mint.movement.get_forwardmove(cmd)
+mint.movement.set_forwardmove(cmd, 450)
+local s = mint.movement.get_sidemove(cmd)
+mint.movement.set_sidemove(cmd, -450)
+local u = mint.movement.get_upmove(cmd)
+mint.movement.set_upmove(cmd, 0)
+
+-- Buttons (string names)
+-- Valid names: "jump", "duck", "forward", "back", "left", "right",
+--              "attack", "attack2", "reload", "use"
+mint.movement.set_button(cmd, "jump", true)
+local held = mint.movement.get_button(cmd, "jump")   -- bool
+
+-- Force a single attack click reliably (via GetButtonBits)
+mint.movement.force_attack()
+
+-- Raw button bitfield
+local bits = mint.movement.get_buttons_raw(cmd)   -- int
+mint.movement.set_buttons_raw(cmd, bits)
+```
+
+### 🧬 CMoveData — *Use inside `on_process_movement_pre/post`*
+
+```lua
+-- Velocity
+local v = mint.movement.move_get_velocity(move)        -- {x, y, z}
+mint.movement.move_set_velocity(move, vx, vy, vz)
+mint.movement.move_add_velocity(move, ax, ay, az)
+mint.movement.move_set_z_velocity(move, vz)
+
+-- Origin
+local p = mint.movement.move_get_origin(move)          -- {x, y, z}
+mint.movement.move_set_origin(move, x, y, z)
+
+-- Move inputs
+local f = mint.movement.move_get_forwardmove(move)
+mint.movement.move_set_forwardmove(move, v)
+local s = mint.movement.move_get_sidemove(move)
+mint.movement.move_set_sidemove(move, v)
+local u = mint.movement.move_get_upmove(move)
+mint.movement.move_set_upmove(move, v)
+
+-- Max speed
+local ms = mint.movement.move_get_max_speed(move)
+mint.movement.move_set_max_speed(move, v)
+local cms = mint.movement.move_get_client_max_speed(move)
+mint.movement.move_set_client_max_speed(move, v)
+
+-- Buttons (raw int)
+local b = mint.movement.move_get_buttons(move)         -- int
+mint.movement.move_set_buttons(move, b)
+local ob = mint.movement.move_get_old_buttons(move)    -- int
+
+-- Button helpers
+-- move_button_down valid names: "jump","duck","forward","back","left","right",
+--                               "moveleft","moveright","attack","attack2","use"
+mint.movement.move_button_down(move, "jump")           -- bool: held this tick
+-- move_button_pressed valid names: "jump","duck","forward","back",
+--                                  "attack","attack2","use"
+mint.movement.move_button_pressed(move, "jump")        -- bool: pressed this tick (not last)
+
+-- View angles
+local a = mint.movement.move_get_view_angles(move)     -- {pitch, yaw, roll}
+mint.movement.move_set_view_angles(move, pitch, yaw, roll)
 ```
 
 ---
 
 ## ⌨️ Input API (`mint.input`)
 
-Detect keyboard and mouse interaction with ease.
-
 ```lua
-if mint.input.is_key_down(VK_SPACE) then
-    print("Space is held!")
-end
+mint.input.is_key_down(vk)      -- bool: key currently held (uses GetAsyncKeyState)
+mint.input.was_key_pressed(vk)  -- bool: key pressed since last call
 
-if mint.input.was_key_pressed(KEY_F) then
-    print("F was just pressed.")
-end
+-- Source Engine ButtonCode support
+mint.input.is_button_down(code) -- bool: button code is held (mouse, etc.)
+mint.input.get_button_name(code)-- string: get engine name for code
+mint.input.lookup_button(name)  -- int: find code by engine name
 ```
 
-**Supported Constants**:
-- `VK_SPACE`, `VK_SHIFT`, `VK_CONTROL`, `VK_ESCAPE`, `VK_F1`..`VK_F12`
-- `KEY_A`..`KEY_Z`, `KEY_0`..`KEY_9`
-- `MOUSE_LEFT`, `MOUSE_RIGHT`, `MOUSE_WHEEL_UP`, `MOUSE_WHEEL_DOWN`
+### ⌨️ Key & Button Constants
+
+| Constant Type | Examples |
+|---|---|
+| **Windows VK** | `VK_SPACE`, `VK_SHIFT`, `VK_CONTROL`, `VK_MENU` (ALT), `VK_TAB`, `VK_ESCAPE`, `VK_F1`..`VK_F12`, `VK_LEFT`..`VK_DOWN` |
+| **Alpha Keys** | `KEY_A` through `KEY_Z` |
+| **Numeric Keys** | `KEY_0` through `KEY_9` |
+| **Mouse/Engine** | `MOUSE_LEFT`, `MOUSE_RIGHT`, `MOUSE_MIDDLE`, `MOUSE_4`, `MOUSE_5`, `MOUSE_WHEEL_UP`, `MOUSE_WHEEL_DOWN` |
 
 ---
 
 ## ⚙️ Engine API (`mint.engine`)
 
-Interact with the Source Engine core.
+### 🛠️ ConVar manipulation
 
-### 🛠️ Console & Variables
 ```lua
-local cheats = mint.engine.get_convar("sv_cheats")
-mint.engine.set_convar("mat_fullbright", "1")
-mint.engine.client_cmd("say Hello from Lua!")
+local cvar = mint.engine.get_convar("sv_cheats")
+-- Returns: {exists=bool, value=string, float_value=float, int_value=int, default_value=string}
+
+local ok = mint.engine.set_convar("sv_cheats", "1")  -- bool
+```
+
+### 🖥️ Engine Commands
+
+```lua
+mint.engine.client_cmd("noclip")
+```
+
+### 📊 Info Queries
+
+```lua
+local idx = mint.engine.get_local_player()   -- int: local player entity index
+local dir = mint.engine.get_game_dir()       -- string: game directory path
+local t   = mint.engine.get_time()           -- double: real wall-clock time (seconds)
+local ht  = mint.engine.get_host_time()      -- double: game host time
+local ft  = mint.engine.get_frametime()      -- double: last frame delta (seconds)
+local ti  = mint.engine.get_tick_interval()  -- float: always 0.015
+local htk = mint.engine.get_host_tick()      -- int: host tick counter
+local map = mint.engine.get_map_name()       -- string: e.g. "d1_canals_01" (empty if no map loaded)
+local fc  = mint.engine.get_frame_count()   -- int: ImGui frame counter (increments every render frame)
+
+-- Get specific entity info by index
+local ent = mint.engine.get_entity_info(index)
+-- Returns: {valid=bool, index=int, is_dormant=bool, class_name=string, origin={x,y,z}}
+
+-- Iterate all client entities
+mint.engine.for_each_entity(function(ent) ... end)
 ```
 
 ### 📍 Spatial Queries (Ray Tracing)
+
 ```lua
--- Trace a line from point A to B (World + Entities)
+-- Entity-aware trace: hits players, NPCs, and props.
 local tr = mint.engine.trace_ray(x1,y1,z1, x2,y2,z2)
-if tr.hit then
-    print("Hit entity at distance: ", tr.fraction)
-end
+-- tr.hit, tr.fraction, tr.hit_pos, tr.normal, tr.entity_index
+
+-- World-only trace: passes through all entities.
+local tr = mint.engine.trace_line(x1,y1,z1, x2,y2,z2)
 ```
 
 ---
 
 ## 🎨 Render API (`mint.render`)
 
-Draw beautiful overlays, ESPs, and HUD elements. Use 0–255 integer RGBA.
-
-### 🖼️ Drawing
+### 🖼️ Layers & Screen
 ```lua
-mint.render.draw_line(x1,y1, x2,y2, 255,176,0,255, 2)
-mint.render.draw_rect_filled(x,y,w,h, 0,0,0,150)
-mint.render.draw_circle_filled(cx,cy, radius, 255,255,255,200)
+mint.render.set_layer("background")   -- behind game world
+mint.render.set_layer("foreground")   -- above everything
+mint.render.set_layer("window")       -- current ImGui window
+local s = mint.render.get_screen_size()  -- {width, height}
 ```
 
-### 📝 Text Effects
+### 📐 2D Primitives
 ```lua
--- Rainbow waving text for that "gamer" aesthetic
-mint.render.draw_text_rainbow_wave(x, y, "MINT", 255, 24, 
-    5, 2, mint.engine.get_time(), 0.5, 1, 0.1, 1, 1)
+mint.render.draw_line(x1,y1, x2,y2, r,g,b,a, thickness)
+mint.render.draw_rect(x,y,w,h, r,g,b,a, thickness)
+mint.render.draw_rect_filled(x,y,w,h, r,g,b,a)
+mint.render.draw_rect_rounded(x,y,w,h, r,g,b,a, rounding, thickness)
+mint.render.draw_rect_rounded_filled(x,y,w,h, r,g,b,a, rounding)
+mint.render.draw_rect_gradient(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, r3,g3,b3,a3, r4,g4,b4,a4)
+mint.render.draw_circle(x,y, radius, r,g,b,a, thickness)
+mint.render.draw_circle_filled(x,y, radius, r,g,b,a)
+mint.render.draw_triangle(x1,y1, x2,y2, x3,y3, r,g,b,a, thickness)
+mint.render.draw_triangle_filled(x1,y1, x2,y2, x3,y3, r,g,b,a)
+mint.render.draw_quad(x1,y1, x2,y2, x3,y3, x4,y4, r,g,b,a, thickness)
+mint.render.draw_quad_filled(x1,y1, x2,y2, x3,y3, x4,y4, r,g,b,a)
+mint.render.draw_arc_filled(cx,cy, radius, a_start, a_end, r,g,b,a, segments)
+mint.render.draw_polyline(points, r,g,b,a, closed, thickness)
+mint.render.draw_polygon_filled(points, r,g,b,a)
+```
+
+### 📝 Text Rendering
+```lua
+mint.render.draw_text(x,y, text, r,g,b,a, size)
+local m = mint.render.text_size(text, size)
+mint.render.draw_text_rotated(cx,cy, text, r,g,b,a, size, angle_rad)
+mint.render.draw_text_wave(x,y, text, r,g,b,a, size, amplitude, frequency, time, phase_per_char)
+mint.render.draw_text_rainbow_wave(x,y, text, alpha, size, amp, freq, t, phase, h_speed, h_char, s, v)
+```
+
+### 🌍 3D / World Space
+```lua
+local s = mint.render.world_to_screen(x, y, z)  -- {valid, x, y}
+mint.render.draw_line_3d(x1,y1,z1, x2,y2,z2, r,g,b,a, thickness)
+mint.render.draw_image(tex_id, x,y,w,h, r,g,b,a)
 ```
 
 ---
 
 ## 🖼️ GUI API (`mint.gui`)
 
-Build custom menus using ImGui-powered widgets.
-
+### 🎛️ Widgets
 ```lua
-function register()
-    mint.gui.register_tab("My Script", function()
-        mint.gui.text("Settings")
-        local r = mint.gui.checkbox("Enabled", is_enabled)
-        if r[1] then is_enabled = r[2] end
-        
-        if mint.gui.button("Reset Fuel", 100, 20) then fuel = 100 end
-    end)
-end
+mint.gui.checkbox("Label", bool)
+mint.gui.slider_float("Label", value, min, max, format)
+mint.gui.slider_int("Label", value, min, max, format)
+mint.gui.button("Label", w, h)
+mint.gui.input_text("Label", string)
+mint.gui.combo("Label", index, items_table)
+mint.gui.color_edit("Label", {r,g,b,a})
+mint.gui.keybind("Label", vk)
+```
+
+### 🏗️ Layout & Groups
+```lua
+mint.gui.separator()
+mint.gui.same_line(offset, spacing)
+mint.gui.new_line()
+mint.gui.spacing()
+mint.gui.indent(w)
+mint.gui.unindent(w)
+mint.gui.text("text")
+mint.gui.text_colored(r, g, b, a, "text")
+mint.gui.progress_bar(fraction, w, h, overlay)
+mint.gui.begin_child("id", w, h, border, flags)
+mint.gui.end_child()
+mint.gui.begin_group()
+mint.gui.end_group()
 ```
 
 ---
 
 ## ✨ Animation API (`mint.anim`)
 
-Make your scripts feel fluid with built-in easing and smoothing.
+### 📉 Interpolation
+```lua
+mint.anim.lerp(a, b, t)
+mint.anim.clamp(v, lo, hi)
+mint.anim.smoothstep(a, b, v)
+mint.anim.damp(current, target, rate, dt)
+```
+
+### 🌊 Easing Functions
+`ease_linear`, `ease_in_quad`, `ease_out_quad`, `ease_in_out_quad`, `ease_in_cubic`, `ease_out_cubic`, `ease_in_out_cubic`, `ease_in_sine`, `ease_out_sine`, `ease_out_elastic`, `ease_out_bounce`, etc.
+
+---
+
+## 💾 Config API (`mint.config`)
 
 ```lua
--- Frametime-independent exponential smoothing
-value = mint.anim.damp(value, target, 10, dt)
-
--- Easing functions
-local alpha = mint.anim.ease_in_out_cubic(progress)
+mint.config.save(key, value)
+local v = mint.config.load(key, default)
+mint.config.save_table(section, table)
+local t = mint.config.load_table(section, default_table)
 ```
+
+---
+
+## 🔒 Sandbox
+
+The following globals are **REMOVED** for security:
+`os`, `io`, `package`, `debug`, `dofile`, `loadfile`, `load`, `require`, `getfenv`, `setfenv`, `rawget`, `rawset`, `rawequal`, `collectgarbage`
 
 ---
 
@@ -202,28 +397,18 @@ function on_create_move(cmd)
 end
 ```
 
-### 🏎️ Speed Readout
-```lua
-function on_render()
-    local s = mint.render.get_screen_size()
-    local vel = mint.movement.get_speed()
-    mint.render.draw_text(s.width/2, s.height-100, string.format("%.0f u/s", vel), 255, 255, 255, 255, 20)
-end
-```
-
 ---
 
 ## 🛠️ Troubleshooting
 
-| Symptom | Likely Cause | Solution |
-| :--- | :--- | :--- |
-| **`[Lua] Error`** | Syntax error | Check the game console for line numbers |
-| **Tab Crashes** | Logic error in menu | Check console while the tab is open |
-| **`save_table` Fail** | Non-string keys | Ensure table keys are strings, not numbers |
-| **Trace is `nil`** | Map not loaded | Ray tracing requires an active game session |
+| Symptom | Cause | Fix |
+|---|---|---|
+| Script shows error | Syntax or API | Check console for `[Lua]` prefix |
+| `save_table` crash | Integer keys | Use string keys only |
+| `on_jump` not firing | Method name | Ensure lowercase `on_jump` |
 
 ---
 
 <p align="center">
-  <i>Generated with ❤️ for the mint community.</i>
+  <i>Developed with ❤️ by the mint team.</i>
 </p>
